@@ -248,10 +248,21 @@ func (srv *endlessServer) ListenAndServe() (err error) {
 	srv.EndlessListener = newEndlessListener(l, srv)
 
 	if srv.isChild {
-		kErr := syscall.Kill(syscall.Getppid(), syscall.SIGTERM)
+		event := fmt.Sprintf("send sigterm from %d to parent %d",
+			syscall.Getpid(), syscall.Getppid())
 
-		logPrintf("error while sending sigterm from %v to parent %v, %v\n",
-			syscall.Getpid(), syscall.Getppid(), kErr)
+		for cnt := 0; cnt < 3; cnt++ {
+			kErr := syscall.Kill(syscall.Getppid(), syscall.SIGTERM)
+
+			if kErr == nil {
+				logPrintf("%s success\n", event)
+
+				break
+			}
+
+			logPrintf("%s failed, %v\n", event, kErr)
+			time.Sleep(10 * time.Millisecond)
+		}
 	}
 
 	srv.BeforeBegin(srv.Addr)
