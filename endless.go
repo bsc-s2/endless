@@ -15,7 +15,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
 	// "github.com/fvbock/uds-go/introspect"
 )
 
@@ -28,6 +27,10 @@ const (
 	STATE_SHUTTING_DOWN
 	STATE_TERMINATE
 )
+
+type LogPrintf func(format string, v ...interface{})
+type LogFatalf func(format string, v ...interface{})
+type LogPrintln func(v ...interface{})
 
 var (
 	runningServerReg     sync.RWMutex
@@ -45,6 +48,9 @@ var (
 	socketOrder string
 
 	hookableSignals []os.Signal
+	logPrintf       LogPrintf
+	logFatalf       LogFatalf
+	logPrintln      LogPrintln
 )
 
 func init() {
@@ -66,6 +72,24 @@ func init() {
 		syscall.SIGINT,
 		syscall.SIGTERM,
 		syscall.SIGTSTP,
+	}
+
+	logPrintf = log.Printf
+	logFatalf = log.Fatalf
+	logPrintln = log.Println
+}
+
+func SetLoggers(pf LogPrintf, ff LogFatalf, pl LogPrintln) {
+	if pf != nil {
+		logPrintf = pf
+	}
+
+	if ff != nil {
+		logFatalf = ff
+	}
+
+	if pl != nil {
+		logPrintln = pl
 	}
 }
 
@@ -134,7 +158,7 @@ func NewServer(addr string, handler http.Handler) (srv *endlessServer) {
 	srv.Server.Handler = handler
 
 	srv.BeforeBegin = func(addr string) {
-		log.Println(syscall.Getpid(), addr)
+		logPrintln(syscall.Getpid(), addr)
 	}
 
 	runningServersOrder = append(runningServersOrder, addr)
@@ -190,10 +214,10 @@ sync.Waitgroup so that all outstanding connections can be served before shutting
 down the server.
 */
 func (srv *endlessServer) Serve() (err error) {
-	defer log.Println(syscall.Getpid(), "Serve() returning...")
+	defer logPrintln(syscall.Getpid(), "Serve() returning...")
 	srv.setState(STATE_RUNNING)
 	err = srv.Server.Serve(srv.EndlessListener)
-	log.Println(syscall.Getpid(), "Waiting for connections to finish...")
+	logPrintln(syscall.Getpid(), "Waiting for connections to finish...")
 	srv.wg.Wait()
 	srv.setState(STATE_TERMINATE)
 	return
@@ -214,7 +238,7 @@ func (srv *endlessServer) ListenAndServe() (err error) {
 
 	l, err := srv.getListener(addr)
 	if err != nil {
-		log.Println(err)
+		logPrintln(err)
 		return
 	}
 
@@ -264,7 +288,7 @@ func (srv *endlessServer) ListenAndServeTLS(certFile, keyFile string) (err error
 
 	l, err := srv.getListener(addr)
 	if err != nil {
-		log.Println(err)
+		logPrintln(err)
 		return
 	}
 
@@ -275,7 +299,7 @@ func (srv *endlessServer) ListenAndServeTLS(certFile, keyFile string) (err error
 		syscall.Kill(syscall.Getppid(), syscall.SIGTERM)
 	}
 
-	log.Println(syscall.Getpid(), srv.Addr)
+	logPrintln(syscall.Getpid(), srv.Addr)
 	return srv.Serve()
 }
 
@@ -290,7 +314,7 @@ func (srv *endlessServer) getListener(laddr string) (l net.Listener, err error) 
 		defer runningServerReg.RUnlock()
 		if len(socketPtrOffsetMap) > 0 {
 			ptrOffset = socketPtrOffsetMap[laddr]
-			// log.Println("laddr", laddr, "ptr offset", socketPtrOffsetMap[laddr])
+			// logPrintln("laddr", laddr, "ptr offset", socketPtrOffsetMap[laddr])
 		}
 
 		f := os.NewFile(uintptr(3+ptrOffset), "")
@@ -327,26 +351,26 @@ func (srv *endlessServer) handleSignals() {
 		srv.signalHooks(PRE_SIGNAL, sig)
 		switch sig {
 		case syscall.SIGHUP:
-			log.Println(pid, "Received SIGHUP. forking.")
+			logPrintln(pid, "Received SIGHUP. forking.")
 			err := srv.fork()
 			if err != nil {
-				log.Println("Fork err:", err)
+				logPrintln("Fork err:", err)
 			}
 		case syscall.SIGUSR1:
-			log.Println(pid, "Received SIGUSR1.")
+			logPrintln(pid, "Received SIGUSR1.")
 		case syscall.SIGUSR2:
-			log.Println(pid, "Received SIGUSR2.")
+			logPrintln(pid, "Received SIGUSR2.")
 			srv.hammerTime(0 * time.Second)
 		case syscall.SIGINT:
-			log.Println(pid, "Received SIGINT.")
+			logPrintln(pid, "Received SIGINT.")
 			srv.shutdown()
 		case syscall.SIGTERM:
-			log.Println(pid, "Received SIGTERM.")
+			logPrintln(pid, "Received SIGTERM.")
 			srv.shutdown()
 		case syscall.SIGTSTP:
-			log.Println(pid, "Received SIGTSTP.")
+			logPrintln(pid, "Received SIGTSTP.")
 		default:
-			log.Printf("Received %v: nothing i care about...\n", sig)
+			logPrintf("Received %v: nothing i care about...\n", sig)
 		}
 		srv.signalHooks(POST_SIGNAL, sig)
 	}
@@ -380,9 +404,9 @@ func (srv *endlessServer) shutdown() {
 	srv.SetKeepAlivesEnabled(false)
 	err := srv.EndlessListener.Close()
 	if err != nil {
-		log.Println(syscall.Getpid(), "Listener.Close() error:", err)
+		logPrintln(syscall.Getpid(), "Listener.Close() error:", err)
 	} else {
-		log.Println(syscall.Getpid(), srv.EndlessListener.Addr(), "Listener closed.")
+		logPrintln(syscall.Getpid(), srv.EndlessListener.Addr(), "Listener closed.")
 	}
 }
 
@@ -401,14 +425,14 @@ func (srv *endlessServer) hammerTime(d time.Duration) {
 		// Done() when the counter was already at 0 and we're done.
 		// (and thus Serve() will return and the parent will exit)
 		if r := recover(); r != nil {
-			log.Println("WaitGroup at 0", r)
+			logPrintln("WaitGroup at 0", r)
 		}
 	}()
 	if srv.getState() != STATE_SHUTTING_DOWN {
 		return
 	}
 	time.Sleep(d)
-	log.Println("[STOP - Hammer Time] Forcefully shutting down parent")
+	logPrintln("[STOP - Hammer Time] Forcefully shutting down parent")
 	for {
 		if srv.getState() == STATE_TERMINATE {
 			break
@@ -453,7 +477,7 @@ func (srv *endlessServer) fork() (err error) {
 		env = append(env, fmt.Sprintf(`ENDLESS_SOCKET_ORDER=%s`, strings.Join(orderArgs, ",")))
 	}
 
-	// log.Println(files)
+	// logPrintln(files)
 	path := os.Args[0]
 	var args []string
 	if len(os.Args) > 1 {
@@ -474,7 +498,7 @@ func (srv *endlessServer) fork() (err error) {
 
 	err = cmd.Start()
 	if err != nil {
-		log.Fatalf("Restart: Failed to launch, error: %v", err)
+		logFatalf("Restart: Failed to launch, error: %v", err)
 	}
 
 	return
