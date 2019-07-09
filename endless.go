@@ -117,6 +117,9 @@ func NewServer(addr string, handler http.Handler) (srv *endlessServer) {
 	socketOrder = os.Getenv("ENDLESS_SOCKET_ORDER")
 	isChild = os.Getenv("ENDLESS_CONTINUE") != ""
 
+	logPrintf("is child? %v, pid: %v, ppid: %v\n",
+		isChild, syscall.Getpid(), syscall.Getppid())
+
 	if len(socketOrder) > 0 {
 		for i, addr := range strings.Split(socketOrder, ",") {
 			socketPtrOffsetMap[addr] = uint(i)
@@ -245,7 +248,10 @@ func (srv *endlessServer) ListenAndServe() (err error) {
 	srv.EndlessListener = newEndlessListener(l, srv)
 
 	if srv.isChild {
-		syscall.Kill(syscall.Getppid(), syscall.SIGTERM)
+		kErr := syscall.Kill(syscall.Getppid(), syscall.SIGTERM)
+
+		logPrintf("error while sending sigterm from %v to parent %v, %v\n",
+			syscall.Getpid(), syscall.Getppid(), kErr)
 	}
 
 	srv.BeforeBegin(srv.Addr)
@@ -296,7 +302,10 @@ func (srv *endlessServer) ListenAndServeTLS(certFile, keyFile string) (err error
 	srv.EndlessListener = tls.NewListener(srv.tlsInnerListener, config)
 
 	if srv.isChild {
-		syscall.Kill(syscall.Getppid(), syscall.SIGTERM)
+		kErr := syscall.Kill(syscall.Getppid(), syscall.SIGTERM)
+
+		logPrintf("error while sending sigterm from %v to parent %v, %v\n",
+			syscall.Getpid(), syscall.Getppid(), kErr)
 	}
 
 	logPrintln(syscall.Getpid(), srv.Addr)
