@@ -6,7 +6,7 @@ import (
 	"os"
 	"syscall"
 
-	"github.com/fvbock/endless"
+	"github.com/bsc-s2/endless"
 	"github.com/gorilla/mux"
 )
 

@@ -2,7 +2,7 @@
 
 Zero downtime restarts for golang HTTP and HTTPS servers. (for golang 1.3+)
 
-[![GoDoc](https://godoc.org/github.com/fvbock/endless?status.svg)](https://godoc.org/github.com/fvbock/endless)
+[![GoDoc](https://godoc.org/github.com/bsc-s2/endless?status.svg)](https://godoc.org/github.com/bsc-s2/endless)
 
 ## Inspiration & Credits
 
@@ -50,7 +50,7 @@ If you had hanging requests and the server got hammered you will see a log messa
 
 ## Examples & Documentation
 
-    import "github.com/fvbock/endless"
+    import "github.com/bsc-s2/endless"
 
 and then replacing `http.ListenAndServe` with `endless.ListenAndServe` or `http.ListenAndServeTLS` with `endless.ListenAndServeTLS`
 
@@ -58,9 +58,9 @@ and then replacing `http.ListenAndServe` with `endless.ListenAndServe` or `http.
 
 After starting your server you can make some changes, build, and send `SIGHUP` to the running process and it will finish handling any outstanding requests and serve all new incoming ones with the new binary.
 
-More examples are in [here](https://github.com/fvbock/endless/tree/master/examples)
+More examples are in [here](https://github.com/bsc-s2/endless/tree/master/examples)
 
-There is also [GoDoc Documentation](https://godoc.org/github.com/fvbock/endless)
+There is also [GoDoc Documentation](https://godoc.org/github.com/bsc-s2/endless)
 
 
 ## Signals
@@ -71,11 +71,11 @@ The endless server will listen for the following signals: `syscall.SIGHUP`, `sys
 
 `syscall.SIGINT` and `syscall.SIGTERM` will trigger a shutdown of the server (it will finish running requests)
 
-`SIGUSR2` will trigger [hammerTime](https://github.com/fvbock/endless#hammer-time)
+`SIGUSR2` will trigger [hammerTime](https://github.com/bsc-s2/endless#hammer-time)
 
 `SIGUSR1` and `SIGTSTP` are listened for but do not trigger anything in the endless server itself. (probably useless - might get rid of those two)
 
-You can hook your own functions to be called *pre* or *post* signal handling - eg. pre fork or pre shutdown. More about that in the [hook example](https://github.com/fvbock/endless/tree/master/examples#hooking-into-the-signal-handling).
+You can hook your own functions to be called *pre* or *post* signal handling - eg. pre fork or pre shutdown. More about that in the [hook example](https://github.com/bsc-s2/endless/tree/master/examples#hooking-into-the-signal-handling).
 
 
 ## Limitation: No changing of ports
