@@ -130,7 +130,8 @@ func NewServer(addr string, handler http.Handler) (srv *endlessServer) {
 
 	srv = &endlessServer{
 		wg:      sync.WaitGroup{},
-		sigChan: make(chan os.Signal),
+		// to prevent losing signals, use 100 as buffer size
+		sigChan: make(chan os.Signal, 100),
 		isChild: isChild,
 		SignalHooks: map[int]map[os.Signal][]func(){
 			PRE_SIGNAL: map[os.Signal][]func(){
@@ -248,19 +249,27 @@ func (srv *endlessServer) ListenAndServe() (err error) {
 	srv.EndlessListener = newEndlessListener(l, srv)
 
 	if srv.isChild {
+		ppid := syscall.Getppid()
+
 		event := fmt.Sprintf("send sigterm from %d to parent %d",
-			syscall.Getpid(), syscall.Getppid())
+			syscall.Getpid(), ppid)
 
 		for cnt := 0; cnt < 3; cnt++ {
-			kErr := syscall.Kill(syscall.Getppid(), syscall.SIGTERM)
-
-			if kErr == nil {
-				logPrintf("%s success\n", event)
+			// child sends SIGTERM to parent.
+			// if parent quits immediately, the new parent of child
+			// is process 1. But parent may be processing other requests,
+			// so here, the reasonable way is to send SIGTERM n times to
+			// parent and the longest time we wait is n*10ms.
+			// here we use 3 as n.
+			if ppid == 1 {
+				logPrintf("%s, ppid is 1", event)
 
 				break
 			}
 
-			logPrintf("%s failed, %v\n", event, kErr)
+			kErr := syscall.Kill(ppid, syscall.SIGTERM)
+			logPrintf("%s, err: %v\n", event, kErr)
+
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
